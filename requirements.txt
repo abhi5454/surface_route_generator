@@ -1,0 +1,33 @@
+# Core data processing
+pandas
+numpy
+gpxpy
+fitparse
+
+# Geospatial libraries
+osmnx
+shapely
+folium
+geopy
+
+# ML/AI libraries
+torch
+torchvision
+torchaudio
+sentence-transformers
+transformers
+
+# Vector database
+chromadb
+
+# LLM API
+google-genai
+
+# Utilities
+tqdm
+requests
+python-dotenv
+
+# Visualization
+matplotlib
+seaborn
