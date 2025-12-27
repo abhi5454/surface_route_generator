@@ -28,7 +28,15 @@ class RouteData:
         distance_km: float,
         elevation_gain: float,
         elevation_loss: float,
-        file_path: Path
+        file_path: Path,
+        # New metrics
+        avg_heart_rate: Optional[float] = None,
+        max_heart_rate: Optional[float] = None,
+        avg_watts: Optional[float] = None,
+        max_watts: Optional[float] = None,
+        avg_cadence: Optional[float] = None,
+        total_calories: Optional[float] = None,
+        vo2_max: Optional[float] = None
     ):
         self.activity_id = activity_id
         self.name = name
@@ -40,6 +48,15 @@ class RouteData:
         self.elevation_gain = elevation_gain
         self.elevation_loss = elevation_loss
         self.file_path = file_path
+        
+        # New metrics
+        self.avg_heart_rate = avg_heart_rate
+        self.max_heart_rate = max_heart_rate
+        self.avg_watts = avg_watts
+        self.max_watts = max_watts
+        self.avg_cadence = avg_cadence
+        self.total_calories = total_calories
+        self.vo2_max = vo2_max
         
         # Calculate derived properties
         self.start_point = coordinates[0] if coordinates else None
@@ -59,7 +76,14 @@ class RouteData:
             "end_lat": self.end_point[0] if self.end_point else None,
             "end_lon": self.end_point[1] if self.end_point else None,
             "num_points": len(self.coordinates),
-            "file_path": str(self.file_path)
+            "file_path": str(self.file_path),
+            "avg_heart_rate": self.avg_heart_rate,
+            "max_heart_rate": self.max_heart_rate,
+            "avg_watts": self.avg_watts,
+            "max_watts": self.max_watts,
+            "avg_cadence": self.avg_cadence,
+            "total_calories": self.total_calories,
+            "vo2_max": self.vo2_max
         }
     
     def get_description(self) -> str:
@@ -73,6 +97,11 @@ class RouteData:
         
         if self.elevation_loss > 0:
             desc_parts.append(f"Elevation loss: {self.elevation_loss:.0f}m")
+        
+        if self.avg_heart_rate:
+            desc_parts.append(f"Avg HR: {self.avg_heart_rate:.0f} bpm")
+        if self.avg_watts:
+            desc_parts.append(f"Avg Power: {self.avg_watts:.0f} W")
             
         return ". ".join(desc_parts)
 
@@ -131,7 +160,15 @@ class ActivityParser:
                 distance_km=distance_km,
                 elevation_gain=elevation_gain,
                 elevation_loss=elevation_loss,
-                file_path=file_path
+                file_path=file_path,
+                # GPX typically doesn't have these unless we parse extensions
+                avg_heart_rate=None,
+                max_heart_rate=None,
+                avg_watts=None,
+                max_watts=None,
+                avg_cadence=None,
+                total_calories=None,
+                vo2_max=None
             )
             
         except Exception as e:
@@ -157,10 +194,29 @@ class ActivityParser:
             name = "Untitled"
             activity_type = "Unknown"
             
+            # Additional metrics
+            metrics = {
+                'avg_heart_rate': None,
+                'max_heart_rate': None,
+                'avg_power': None,
+                'max_power': None,
+                'avg_cadence': None,
+                'total_calories': None,
+                'vo2_max_running': None,
+                'vo2_max_cycling': None
+            }
+            
             for record in fitfile.get_messages('session'):
                 for field in record:
                     if field.name == 'sport':
                         activity_type = field.value
+                    elif field.name in metrics:
+                        metrics[field.name] = field.value
+                        
+            # Resolve combined metrics
+            avg_watts = metrics['avg_power']
+            max_watts = metrics['max_power']
+            vo2_max = metrics['vo2_max_running'] or metrics['vo2_max_cycling']
                         
             # Extract track points
             for record in fitfile.get_messages('record'):
@@ -204,7 +260,14 @@ class ActivityParser:
                 distance_km=distance_km,
                 elevation_gain=elevation_gain,
                 elevation_loss=elevation_loss,
-                file_path=file_path
+                file_path=file_path,
+                avg_heart_rate=metrics['avg_heart_rate'],
+                max_heart_rate=metrics['max_heart_rate'],
+                avg_watts=avg_watts,
+                max_watts=max_watts,
+                avg_cadence=metrics['avg_cadence'],
+                total_calories=metrics['total_calories'],
+                vo2_max=vo2_max
             )
             
         except Exception as e:
@@ -310,6 +373,7 @@ if __name__ == "__main__":
         print(f"Type: {route.activity_type}")
         print(f"Distance: {route.distance_km:.2f} km")
         print(f"Elevation: +{route.elevation_gain:.0f}m / -{route.elevation_loss:.0f}m")
+        print(f"Metrics: HR={route.avg_heart_rate or 'N/A'}, Power={route.avg_watts or 'N/A'}, Cal={route.total_calories or 'N/A'}")
         print(f"Points: {len(route.coordinates)}")
         print(f"Description: {route.get_description()}")
         print(f"{'-'*60}\n")

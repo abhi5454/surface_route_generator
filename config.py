@@ -31,8 +31,8 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")  # For Gemini
 # ============================================================================
 # LLM Configuration
 # ============================================================================
-GEMINI_MODEL = "gemini-2.0-flash"  # Use available Gemini model
-GEMINI_MAX_TOKENS = 1024
+GEMINI_MODEL = "gemini-2.5-flash-lite"  # Available for this key
+GEMINI_MAX_TOKENS = 4096
 
 # ============================================================================
 # PyTorch Configuration

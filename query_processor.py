@@ -57,7 +57,7 @@ Return structured JSON parameters."""
             
             # Extract JSON from response
             content = response.text
-            
+            print("Gemini response:", content)
             # Try to extract JSON from the response
             json_match = re.search(r'\{.*\}', content, re.DOTALL)
             if json_match:
@@ -133,19 +133,32 @@ Return structured JSON parameters."""
             'activity_type': None
         }
         
-        # Extract distance
-        dist_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:km|kilometer)', query_lower)
+        # Extract distance - supports "5km", "5 km", "5k", "500m", "500 meters"
+        # Match number then optional space then unit
+        dist_match = re.search(r'(\d+(?:\.\d+)?)\s*(k(?:ilo)?m(?:eters?)?|k|m(?:eters?)?)?\b', query_lower)
         if dist_match:
-            dist = float(dist_match.group(1))
-            params['distance_km'] = dist
-            params['distance_range'] = (dist * 0.8, dist * 1.2)
+            val = float(dist_match.group(1))
+            unit = dist_match.group(2)
+            
+            # Normalize to km
+            if unit and (unit.startswith('m') and 'km' not in unit):
+                val = val / 1000.0  # Convert meters to km
+            
+            # If no unit or 'k'/'km', treat as km (default for "5k" or "5")
+            # But be careful with just a number, might be something else. 
+            # Assuming queries usually contain distance if a number is present.
+            
+            params['distance_km'] = val
+            params['distance_range'] = (val * 0.8, val * 1.2)
         
         # Detect route type
         if 'loop' in query_lower:
             params['route_type'] = 'loop'
         elif 'out and back' in query_lower or 'out-and-back' in query_lower:
             params['route_type'] = 'out-and-back'
-        
+        elif 'point to point' in query_lower or 'point-to-point' in query_lower:
+             params['route_type'] = 'point-to-point'
+
         # Detect amenities
         if 'cafe' in query_lower or 'coffee' in query_lower:
             params['amenities_required'].append('cafe')
@@ -153,11 +166,13 @@ Return structured JSON parameters."""
             params['amenities_required'].append('restaurant')
         if 'park' in query_lower:
             params['amenities_required'].append('park')
+        if 'pub' in query_lower or 'bar' in query_lower:
+            params['amenities_required'].append('pub')
         
         # Detect surface
-        if 'paved' in query_lower:
+        if 'paved' in query_lower or 'road' in query_lower or 'asphalt' in query_lower:
             params['surface_preferences'].append('paved')
-        if 'unpaved' in query_lower or 'trail' in query_lower:
+        if 'unpaved' in query_lower or 'trail' in query_lower or 'gravel' in query_lower or 'dirt' in query_lower:
             params['surface_preferences'].append('unpaved')
         
         # Detect activity type
@@ -167,6 +182,8 @@ Return structured JSON parameters."""
             params['activity_type'] = 'Ride'
         elif 'walk' in query_lower:
             params['activity_type'] = 'Walk'
+        elif 'hike' in query_lower:
+            params['activity_type'] = 'Hike'
         
         return params
     

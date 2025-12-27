@@ -160,21 +160,88 @@ class LocationGeocoder:
         return results
 
 
+    
+    def forward_geocode(self, location_name: str) -> Optional[Tuple[float, float]]:
+        """
+        Get coordinates for a place name.
+        
+        Args:
+            location_name: Name of the place (e.g., "Bangalore", "Central Park")
+            
+        Returns:
+            Tuple of (lat, lon) or None if not found
+        """
+        # Check cache
+        cache_key = f"fwd_{location_name.lower().strip()}"
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+        
+        try:
+            time.sleep(1.1)  # Rate limiting
+            
+            location = self.geolocator.geocode(
+                location_name,
+                exactly_one=True,
+                language='en'
+            )
+            
+            if location:
+                coords = (location.latitude, location.longitude)
+                self.cache[cache_key] = coords
+                self._save_cache()
+                return coords
+            
+            return None
+            
+        except Exception as e:
+            print(f"Geocoding error for '{location_name}': {e}")
+            return None
+
+    @staticmethod
+    def calculate_distance(coords1: Tuple[float, float], coords2: Tuple[float, float]) -> float:
+        """
+        Calculate distance between two points in km using Haversine formula.
+        """
+        import math
+        
+        lat1, lon1 = coords1
+        lat2, lon2 = coords2
+        
+        R = 6371  # Earth radius in km
+        
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        
+        a = (math.sin(dlat / 2) ** 2 +
+             math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+             math.sin(dlon / 2) ** 2)
+        
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        
+        return R * c
+
 if __name__ == "__main__":
     # Test geocoder
     print("Testing Location Geocoder\n")
     
     geocoder = LocationGeocoder()
     
-    # Test coordinates (example: Bangalore, India)
+    # Test reverse geocoding
     test_coords = [
         (12.9716, 77.5946),  # Bangalore city center
         (12.9352, 77.6245),  # Koramangala
     ]
     
+    print("Reverse Geocoding:")
     for lat, lon in test_coords:
         print(f"\nCoordinates: ({lat}, {lon})")
         short = geocoder.get_short_location(lat, lon)
         print(f"  Short: {short}")
-        full = geocoder.get_full_address(lat, lon)
-        print(f"  Full: {full}")
+    
+    # Test forward geocoding
+    print("\nForward Geocoding:")
+    locations = ["Bangalore", "New York", "NonExistentPlace123"]
+    for loc in locations:
+        coords = geocoder.forward_geocode(loc)
+        print(f"  {loc}: {coords}")
+

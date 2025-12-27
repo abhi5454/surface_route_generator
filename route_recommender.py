@@ -10,6 +10,7 @@ from embedding_generator import EmbeddingGenerator
 from vector_store import VectorStore
 from osm_enricher import OSMEnricher
 from query_processor import QueryProcessor
+from geocoder import LocationGeocoder
 
 
 @dataclass
@@ -44,11 +45,13 @@ class RouteRecommender:
         self.embedding_generator = embedding_generator
         self.osm_enricher = osm_enricher or OSMEnricher()
         self.query_processor = query_processor
+        self.geocoder = LocationGeocoder()
         
         if query_processor:
             print("Route Recommender initialized with Claude query processing")
         else:
             print("Route Recommender initialized (query processing disabled)")
+    
     
     def search_routes(
         self,
@@ -59,11 +62,25 @@ class RouteRecommender:
         """Search for routes using natural language query"""
         
         # Parse query parameters
+        location_coords = None
+        location_name = None
+        
         if use_llm and self.query_processor:
             try:
                 query_params = self.query_processor.parse_query(query)
                 print(f"Parsed query: {query_params.get('distance_km', 'any')} km, "
                       f"Type: {query_params.get('activity_type', 'any')}")
+                
+                # Check for location
+                location_name = query_params.get('location')
+                if location_name:
+                    print(f"Filtering by location: {location_name}")
+                    location_coords = self.geocoder.forward_geocode(location_name)
+                    if location_coords:
+                        print(f"  Found coordinates: {location_coords}")
+                    else:
+                        print(f"  Could not geocode location: {location_name}")
+                        
             except Exception as e:
                 print(f"Query parsing failed, using fallback: {e}")
                 query_params = self._simple_parse(query)
@@ -73,29 +90,42 @@ class RouteRecommender:
         # Generate embedding for query
         query_embedding = self.embedding_generator.generate_single_embedding(query)
         
-        # First try with filters
+        # Determine how many results to fetch initially
+        # If filtering by location, fetch more results to allow for filtering
+        fetch_n = n_results * 5 if location_coords else n_results
+        
+        # Search
         results = self.vector_store.search_by_filters(
             query_embedding,
             distance_range=query_params.get('distance_range'),
-            activity_types=None,  # Don't filter by activity type for better results
-            n_results=n_results
+            activity_types=None,
+            n_results=fetch_n
         )
-        
-        # If no results, try without distance filter
-        if not results.get('ids') or not results['ids'][0]:
-            print("No filtered results, searching all routes...")
-            results = self.vector_store.search(
-                query_embedding,
-                n_results=n_results
-            )
         
         # Convert to recommendations
-        recommendations = self._process_results(
-            results,
-            query_params
-        )
+        recommendations = self._process_results(results, query_params)
         
-        return recommendations
+        # Filter by location if applicable
+        if location_coords:
+            filtered_recs = []
+            max_distance_km = 30.0  # Max distance from search location
+            
+            for rec in recommendations:
+                if rec.start_coords:
+                    dist = self.geocoder.calculate_distance(location_coords, rec.start_coords)
+                    if dist <= max_distance_km:
+                        # Update explanation to mention proximity
+                        rec.explanation += f" ({dist:.1f} km from {location_name})"
+                        filtered_recs.append(rec)
+            
+            if filtered_recs:
+                recommendations = filtered_recs
+                print(f"Filtered to {len(recommendations)} routes near {location_name}")
+            else:
+                print(f"No routes found near {location_name}, showing original results")
+        
+        # Return top N
+        return recommendations[:n_results]
     
     def _process_results(
         self,
@@ -148,9 +178,9 @@ class RouteRecommender:
                 end_lat = metadata.get('end_lat')
                 end_lon = metadata.get('end_lon')
                 
-                if start_lat and start_lon:
+                if start_lat and start_lon and start_lat != 'None' and start_lon != 'None':
                     start_coords = (float(start_lat), float(start_lon))
-                if end_lat and end_lon:
+                if end_lat and end_lon and end_lat != 'None' and end_lon != 'None':
                     end_coords = (float(end_lat), float(end_lon))
             except (ValueError, TypeError):
                 pass
@@ -218,14 +248,16 @@ class RouteRecommender:
             
             # Show location information
             if rec.start_location and rec.start_location != "Unknown":
-                output_lines.append(f"   📍 Start: {rec.start_location}")
+                output_lines.append(f"    Start: {rec.start_location}")
             if rec.end_location and rec.end_location != "Unknown":
-                output_lines.append(f"   🏁 End:   {rec.end_location}")
+                output_lines.append(f"    End:   {rec.end_location}")
+            # if rec.elevation_gain and rec.elevation_gain != "Unknown":
+            output_lines.append(f"    Elevation Gain: {int(rec.elevation_gain)}m")
             
-            output_lines.append(f"   Similarity: {rec.similarity_score:.1%}")
+            output_lines.append(f"    Similarity: {rec.similarity_score:.1%} (Semantic match to your query)")
             
             if show_details:
-                output_lines.append(f"   Route ID: {rec.route_id}")
+                output_lines.append(f"    Route ID: {rec.route_id}")
             
             output_lines.append("")
         

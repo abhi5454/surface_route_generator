@@ -1,9 +1,17 @@
+
 """
 Command-line interface for the Surface-Aware Route Generator.
 """
 import argparse
 import sys
+import webbrowser
+from typing import Optional, List
+
 from pathlib import Path
+
+# Force UTF-8 output for Windows terminals to handle emojis
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
 
 from data_processor import ActivityParser
 from embedding_generator import EmbeddingGenerator
@@ -185,13 +193,35 @@ class CLI:
         # For now, visualize the top recommendation
         top_rec = recommendations[0]
         
-        if not top_rec.start_coords or not top_rec.end_coords:
-            print("Cannot visualize: No coordinate data available")
-            return
+        # Try to get full coordinates from file
+        coords = []
+        if top_rec.metadata and top_rec.metadata.get('file_path'):
+            file_path = Path(top_rec.metadata.get('file_path'))
+            try:
+                # We need to handle potential relative paths or just use the name if in expected dir
+                # Only re-parse if file exists
+                if not file_path.exists():
+                    # Try finding it in ACTIVITIES_DIR if it was stored as just name or relative
+                    from config import ACTIVITIES_DIR
+                    potential_path = ACTIVITIES_DIR / file_path.name
+                    if potential_path.exists():
+                        file_path = potential_path
+                
+                if file_path.exists():
+                    print(f"Loading full route from: {file_path.name}")
+                    route_data = self.parser.parse_activity_file(file_path)
+                    if route_data:
+                        coords = route_data.coordinates
+            except Exception as e:
+                print(f"Error loading full route path: {e}")
         
-        # Create a simple route line (start to end) for visualization
-        # In a full implementation, we'd load the full GPX/FIT coordinates
-        coords = [top_rec.start_coords, top_rec.end_coords]
+        # Fallback to simple line if file parsing failed
+        if not coords:
+            if not top_rec.start_coords or not top_rec.end_coords:
+                print("Cannot visualize: No coordinate data available")
+                return
+            print("Warning: Could not load full route data, showing straight line start-to-end.")
+            coords = [top_rec.start_coords, top_rec.end_coords]
         
         route_map = self.map_visualizer.create_route_map(
             coordinates=coords,
