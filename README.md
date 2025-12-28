@@ -4,11 +4,11 @@ Gen AI-powered route discovery using Strava data, OpenStreetMap, and semantic se
 
 ## Features
 
-- 🗺️ **Natural Language Queries**: "Find me a 10km loop with a coffee shop at the end"
-- 🤖 **Google Gemini Integration**: Intelligent query understanding
-- 🔍 **Semantic Search**: Vector embeddings with PyTorch
-- 🌍 **OSM Integration**: Surface types and amenities
-- ⚡ **GPU Acceleration**: PyTorch with CUDA support
+- **Natural Language Queries**: "Find me a 10km loop with a coffee shop at the end"
+- **Google Gemini Integration**: Intelligent query understanding
+- **Semantic Search**: Vector embeddings with PyTorch
+- **OSM Integration**: Surface types and amenities
+- **GPU Acceleration**: PyTorch with CUDA support
 
 ## Setup
 
